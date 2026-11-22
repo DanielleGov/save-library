@@ -34,11 +34,12 @@ import {
 } from './lib/types';
 import { analyzeLink, displayUrl } from './lib/url';
 import { $, clear, h, pickFiles, readFileText, toast } from './ui/dom';
+import { hydrateIcons, icon } from './ui/icons';
 
 type View = 'library' | 'inbox' | 'categories' | 'more';
 const PAGE = 60;
 const PLATFORM_GLYPH: Record<Platform, string> = {
-  instagram: 'IG', facebook: 'f', tiktok: 'TT', youtube: '▶', pinterest: 'P', etsy: 'E', other: '🔗',
+  instagram: 'IG', facebook: 'f', tiktok: 'TT', youtube: '▶', pinterest: 'P', etsy: 'E', other: '↗',
 };
 
 let store: LibraryStore;
@@ -60,8 +61,12 @@ async function boot(): Promise<void> {
     return;
   }
   index = new SearchIndex(categoryNameLookup(store.categories));
-  store.onChange(() => updateInboxCount());
-  document.querySelectorAll<HTMLButtonElement>('.tabbar button').forEach((b) =>
+  hydrateIcons();
+  store.onChange(() => {
+    updateInboxCount();
+    updateSubtitle();
+  });
+  document.querySelectorAll<HTMLButtonElement>('.tabbar button[data-view]').forEach((b) =>
     b.addEventListener('click', () => go(b.dataset.view as View)),
   );
   $('#add-btn').addEventListener('click', () => openAddDialog());
@@ -81,7 +86,21 @@ function updateOnline(): void {
 
 function updateInboxCount(): void {
   const n = store.bookmarks.filter((b) => b.categoryId === null).length;
-  $('#inbox-count').textContent = n ? `(${n})` : '';
+  const el = $('#inbox-count');
+  el.textContent = n ? (n > 99 ? '99+' : String(n)) : '';
+  el.setAttribute('aria-label', n ? `${n} uncategorized` : '');
+}
+
+function updateSubtitle(): void {
+  const n = store.bookmarks.length;
+  const inbox = store.bookmarks.filter((b) => b.categoryId === null).length;
+  const subs: Record<View, string> = {
+    library: n ? `${n} saved · ${inbox} waiting in Inbox` : 'Nothing saved yet',
+    inbox: inbox ? `${inbox} to organize` : 'All organized',
+    categories: `${store.categories.length} ${store.categories.length === 1 ? 'category' : 'categories'}`,
+    more: 'Import, backup & settings',
+  };
+  $('#view-sub').textContent = subs[state.view];
 }
 
 /** Rebuild the search cache (category names feed the searchable text). */
@@ -93,7 +112,7 @@ function go(view: View, filters?: Partial<Filters>): void {
   state.view = view;
   state.shown = PAGE;
   if (filters) state.filters = { ...EMPTY_FILTERS, ...filters };
-  document.querySelectorAll<HTMLButtonElement>('.tabbar button').forEach((b) => {
+  document.querySelectorAll<HTMLButtonElement>('.tabbar button[data-view]').forEach((b) => {
     if (b.dataset.view === view) b.setAttribute('aria-current', 'page');
     else b.removeAttribute('aria-current');
   });
@@ -105,6 +124,7 @@ function render(): void {
   const titles: Record<View, string> = { library: 'Library', inbox: 'Inbox', categories: 'Categories', more: 'More' };
   $('#view-title').textContent = titles[state.view];
   document.title = `${titles[state.view]} · Save Library`;
+  updateSubtitle();
   const m = main();
   clear(m);
   if (state.view === 'library') renderLibrary(m, false);
@@ -160,8 +180,8 @@ function renderLibrary(m: HTMLElement, inbox: boolean): void {
   if (inbox) filters.style.gridTemplateColumns = 'repeat(2, minmax(0, 1fr))';
 
   const view = store.settings.view;
-  const listBtn = h('button', { type: 'button', class: 'btn small', 'aria-pressed': String(view === 'list') }, 'List');
-  const gridBtn = h('button', { type: 'button', class: 'btn small', 'aria-pressed': String(view === 'grid') }, 'Grid');
+  const listBtn = h('button', { type: 'button', 'aria-pressed': String(view === 'list') }, icon('list', 16), 'List');
+  const gridBtn = h('button', { type: 'button', 'aria-pressed': String(view === 'grid') }, icon('grid', 16), 'Grid');
   const setView = async (v: 'list' | 'grid') => {
     await store.saveSettings({ view: v });
     listBtn.setAttribute('aria-pressed', String(v === 'list'));
@@ -172,9 +192,10 @@ function renderLibrary(m: HTMLElement, inbox: boolean): void {
   gridBtn.addEventListener('click', () => setView('grid'));
 
   const count = h('p', { class: 'result-count', 'aria-live': 'polite' });
-  const toolbar = h('div', { class: 'toolbar' }, count, h('div', { class: 'row', role: 'group', 'aria-label': 'Layout' }, listBtn, gridBtn));
+  const toolbar = h('div', { class: 'toolbar' }, count, h('div', { class: 'segmented', role: 'group', 'aria-label': 'Layout' }, listBtn, gridBtn));
   const results = h('div', { id: 'results' });
-  m.append(search, filters, toolbar, results);
+  const searchbar = h('div', { class: 'searchbar' }, h('span', { class: 'search-icon' }, icon('search')), search);
+  m.append(searchbar, filters, toolbar, results);
 
   function renderResults(): void {
     const filters: Filters = inbox ? { ...f, category: 'inbox' } : f;
@@ -188,7 +209,10 @@ function renderLibrary(m: HTMLElement, inbox: boolean): void {
       return;
     }
     if (!found.length) {
-      results.append(h('p', { class: 'empty' }, inbox && total === 0 ? 'Inbox is empty — everything is organized.' : 'No matches. Try fewer words or clear a filter.'));
+      results.append(inbox && total === 0
+        ? h('div', { class: 'empty-card' }, h('div', { class: 'empty-art' }, icon('check', 40)),
+          h('h2', {}, 'All organized'), h('p', {}, 'New captures and links land here until you give them a category.'))
+        : h('p', { class: 'empty' }, 'No matches. Try fewer words or clear a filter.'));
       return;
     }
     const ul = h('ul', { class: `cards ${store.settings.view}` });
@@ -221,18 +245,22 @@ function renderLibrary(m: HTMLElement, inbox: boolean): void {
 let rerenderResults: () => void = () => undefined;
 
 function emptyLibrary(): HTMLElement {
-  return h('div', { class: 'empty' },
-    h('p', {}, 'Your library is empty.'),
-    h('p', {}, 'Add a link, paste several, or import captures from the Save to Library Shortcut.'),
+  return h('div', { class: 'empty-card' },
+    h('div', { class: 'empty-art' }, icon('link', 40)),
+    h('h2', {}, 'Your library is empty.'),
+    h('p', {}, 'Share a reel to the Save to Library Shortcut, or paste a link to get started.'),
     h('div', { class: 'row' },
-      h('button', { type: 'button', class: 'btn primary', onclick: () => openAddDialog() }, 'Add Link'),
-      h('button', { type: 'button', class: 'btn', onclick: () => importShortcutInbox() }, 'Import Shortcut Inbox')));
+      h('button', { type: 'button', class: 'btn primary', onclick: () => openAddDialog() }, icon('plus', 18), 'Add Link'),
+      h('button', { type: 'button', class: 'btn', onclick: () => importShortcutInbox() }, icon('download', 18), 'Import Shortcut Inbox')));
 }
 
 function displayTitle(b: Bookmark): string {
   if (b.title) return b.title;
-  if (b.sharedText) return b.sharedText.split('\n').find((l) => l.trim()) ?? displayUrl(b.url);
-  return displayUrl(b.url);
+  const line = b.sharedText?.split('\n').find((l) => l.trim());
+  if (line) return line;
+  if (b.platform === 'other') return displayUrl(b.url);
+  // Opaque platform link with no text: a readable label beats a raw URL fragment.
+  return `${PLATFORM_LABELS[b.platform]} ${b.mediaType === 'unknown' ? 'link' : MEDIA_LABELS[b.mediaType].toLowerCase()}`;
 }
 
 function card(b: Bookmark, suggestion: Suggestion | null, inbox: boolean): HTMLLIElement {
@@ -240,17 +268,18 @@ function card(b: Bookmark, suggestion: Suggestion | null, inbox: boolean): HTMLL
   const title = displayTitle(b);
   const thumb = h('div', { class: 'thumb', 'data-thumb': b.id });
   thumb.append(placeholder(b));
-  const sub = [PLATFORM_LABELS[b.platform], MEDIA_LABELS[b.mediaType], catName ?? (inbox ? null : 'Inbox')]
-    .filter(Boolean)
-    .join(' · ');
+  const sub = h('span', { class: 'sub' },
+    h('span', { class: `pill platform-${b.platform}` }, PLATFORM_LABELS[b.platform]),
+    h('span', {}, MEDIA_LABELS[b.mediaType]),
+    inbox ? null : h('span', { class: catName ? 'cat' : 'cat inbox', dir: 'auto' }, catName ?? 'Inbox'));
   const li = h('li', { class: 'card' },
     h('a', { class: 'card-open', href: b.url, target: '_blank', rel: 'noopener noreferrer', referrerpolicy: 'no-referrer',
       'aria-label': `Open original: ${title} (${PLATFORM_LABELS[b.platform]} ${MEDIA_LABELS[b.mediaType]})` },
       thumb,
       h('div', { class: 'meta' },
         h('span', { class: 'title', dir: 'auto' }, title),
-        h('span', { class: 'sub', dir: 'auto' }, sub))),
-    h('button', { type: 'button', class: 'edit-btn', 'aria-label': `Edit ${title}`, onclick: () => openEditDialog(b.id) }, 'Edit'));
+        sub)),
+    h('button', { type: 'button', class: 'edit-btn', 'aria-label': `Edit ${title}`, title: 'Edit', onclick: () => openEditDialog(b.id) }, icon('edit', 18)));
   if (inbox) li.append(inboxRow(b, suggestion));
   return li;
 }
@@ -268,12 +297,12 @@ function inboxRow(b: Bookmark, s: Suggestion | null): HTMLElement {
       toast(`Moved to ${s.name}`);
       rerenderResults();
     });
-    const ignore = h('button', { type: 'button', class: 'btn small' }, 'Ignore');
+    const ignore = h('button', { type: 'button', class: 'btn small ghost' }, 'Ignore');
     ignore.addEventListener('click', async () => {
       await store.updateBookmark(b.id, { suggestDismissed: true });
       rerenderResults();
     });
-    row.append(h('span', {}, 'Suggested:'), accept, ignore);
+    row.append(h('span', { class: 'label' }, icon('sparkle', 16), 'Suggested'), accept, ignore);
   }
   const sel = h('select', { 'aria-label': `Move ${displayTitle(b)} to category` },
     option('', s && !b.suggestDismissed ? 'Other…' : 'Move to…', true),
@@ -368,7 +397,7 @@ function dropCoverUrl(id: string): void {
 function showDialog(title: string, body: Node[], actions: HTMLElement[]): HTMLDialogElement {
   const d = dialog();
   clear(d);
-  const close = h('button', { type: 'button', class: 'btn small', 'aria-label': 'Close' }, 'Close');
+  const close = h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Close' }, icon('close', 18));
   close.addEventListener('click', () => d.close());
   d.append(h('div', { class: 'dlg' },
     h('header', {}, h('h2', { id: 'dialog-title' }, title), close),
@@ -420,8 +449,9 @@ function openAddDialog(prefill = ''): void {
   const note = h('textarea', { dir: 'auto', maxlength: LIMITS.note, placeholder: 'Optional' });
   const cat = categorySelect(null);
   const newCat = newCategoryInput(cat);
-  const suggestionBox = h('p', { class: 'hint', 'aria-live': 'polite' });
-  const paste = h('button', { type: 'button', class: 'btn small' }, 'Paste');
+  const suggestionBox = h('div', { class: 'suggest', 'aria-live': 'polite' });
+  suggestionBox.style.margin = '0';
+  const paste = h('button', { type: 'button', class: 'btn' }, icon('paste', 18), 'Paste');
   paste.addEventListener('click', async () => {
     try {
       const t = await navigator.clipboard.readText();
@@ -434,10 +464,12 @@ function openAddDialog(prefill = ''): void {
   });
   const updateSuggestion = () => {
     clear(suggestionBox);
+    suggestionBox.hidden = true;
     if (cat.value) return;
     const s = suggestCategory({ title: title.value, note: note.value, tags: [], sharedText: '' }, store.categories);
     if (!s) return;
-    const use = h('button', { type: 'button', class: 'btn small' }, s.kind === 'existing' ? `Use ${s.name}` : `Create “${s.name}”`);
+    suggestionBox.hidden = false;
+    const use = h('button', { type: 'button', class: 'btn small primary' }, s.kind === 'existing' ? `Use ${s.name}` : `Create “${s.name}”`);
     use.addEventListener('click', async () => {
       if (s.kind === 'existing') cat.value = s.categoryId;
       else {
@@ -447,8 +479,9 @@ function openAddDialog(prefill = ''): void {
         cat.value = c.id;
       }
       clear(suggestionBox);
+      suggestionBox.hidden = true;
     });
-    suggestionBox.append('Suggestion: ', use);
+    suggestionBox.append(h('span', { class: 'label' }, icon('sparkle', 16), 'Suggested'), use);
   };
   title.addEventListener('input', updateSuggestion);
   note.addEventListener('input', updateSuggestion);
@@ -480,7 +513,7 @@ function openAddDialog(prefill = ''): void {
     render();
   });
   showDialog('Add Link', [
-    h('label', { class: 'field' }, h('span', {}, 'Link'), h('div', { class: 'row' }, url, paste)),
+    h('label', { class: 'field' }, h('span', {}, 'Link'), h('div', { class: 'input-row' }, url, paste)),
     err,
     h('label', { class: 'field' }, h('span', {}, 'Title'), title),
     h('label', { class: 'field' }, h('span', {}, 'Note'), note),
@@ -489,12 +522,11 @@ function openAddDialog(prefill = ''): void {
     suggestionBox,
     h('p', { class: 'hint' }, 'Only the link is required. Nothing is fetched from the site.'),
   ], [
-    h('button', { type: 'button', class: 'btn', onclick: () => { dialog().close(); openBulkDialog(); } }, 'Paste many…'),
+    h('button', { type: 'button', class: 'btn ghost', onclick: () => { dialog().close(); openBulkDialog(); } }, 'Paste many…'),
     h('span', { class: 'spacer' }),
     save,
   ]);
-  url.style.flex = '1';
-  url.style.width = 'auto';
+  suggestionBox.hidden = true;
   url.focus();
 }
 
@@ -515,7 +547,7 @@ function openEditDialog(id: string): void {
   const newCat = newCategoryInput(cat);
   const type = h('select', {}, MEDIA_TYPES.map((t) => option(t, MEDIA_LABELS[t], t === b.mediaType)));
 
-  const coverBox = h('div', { class: 'row' });
+  const coverBox = h('div', { class: 'cover-row' });
   const renderCover = async () => {
     clear(coverBox);
     const cur = store.get(id)!;
@@ -524,7 +556,7 @@ function openEditDialog(id: string): void {
       const u = await coverObjectUrl(id);
       if (u) preview.append(h('img', { src: u, alt: 'Current cover image' }));
     } else preview.append(placeholder(cur));
-    const add = h('button', { type: 'button', class: 'btn small' }, cur.hasCover ? 'Replace cover' : 'Add cover image');
+    const add = h('button', { type: 'button', class: 'btn small primary' }, icon('image', 16), cur.hasCover ? 'Replace cover' : 'Add cover image');
     add.addEventListener('click', async () => {
       const [file] = await pickFiles('image/*', false);
       if (!file) return;
@@ -540,11 +572,9 @@ function openEditDialog(id: string): void {
       }
       void renderCover();
     });
-    const actions = h('div', { class: 'row' }, add);
-    actions.style.flexDirection = 'column';
-    actions.style.alignItems = 'flex-start';
+    const actions = h('div', { class: 'cover-actions' }, add);
     if (cur.hasCover) {
-      const rm = h('button', { type: 'button', class: 'btn small danger' }, 'Remove cover');
+      const rm = h('button', { type: 'button', class: 'btn small danger' }, icon('trash', 16), 'Remove cover');
       rm.addEventListener('click', async () => {
         await store.removeCover(id);
         dropCoverUrl(id);
@@ -557,7 +587,7 @@ function openEditDialog(id: string): void {
   };
   void renderCover();
 
-  const copy = h('button', { type: 'button', class: 'btn small' }, 'Copy link');
+  const copy = h('button', { type: 'button', class: 'btn small' }, icon('link', 16), 'Copy link');
   copy.addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(b.url);
@@ -566,7 +596,7 @@ function openEditDialog(id: string): void {
       toast('Copy is blocked here');
     }
   });
-  const del = h('button', { type: 'button', class: 'btn danger' }, 'Delete');
+  const del = h('button', { type: 'button', class: 'btn danger' }, icon('trash', 18), 'Delete');
   del.addEventListener('click', async () => {
     if (!window.confirm('Delete this bookmark? This cannot be undone.')) return;
     await store.deleteBookmark(id);
@@ -595,9 +625,11 @@ function openEditDialog(id: string): void {
   });
 
   showDialog('Edit bookmark', [
-    h('div', { class: 'field' }, h('span', {}, 'Original link'), h('p', { class: 'url-text', dir: 'ltr' }, b.url),
+    h('div', { class: 'link-card' },
+      h('div', { class: 'sub' }, h('span', { class: `pill platform-${b.platform}` }, PLATFORM_LABELS[b.platform]), h('span', {}, MEDIA_LABELS[b.mediaType])),
+      h('p', { class: 'url-text', dir: 'ltr' }, b.url),
       h('div', { class: 'row' },
-        h('a', { class: 'btn small', href: b.url, target: '_blank', rel: 'noopener noreferrer' }, 'Open original'), copy)),
+        h('a', { class: 'btn small primary', href: b.url, target: '_blank', rel: 'noopener noreferrer' }, icon('external', 16), 'Open original'), copy)),
     b.sharedText ? h('div', { class: 'field' }, h('span', {}, 'Shared text'), h('p', { class: 'shared', dir: 'auto' }, b.sharedText)) : null,
     h('label', { class: 'field' }, h('span', {}, 'Title'), title),
     h('label', { class: 'field' }, h('span', {}, 'Category'), cat),
@@ -773,12 +805,24 @@ async function restoreBackup(): Promise<void> {
 /* Categories                                                          */
 /* ------------------------------------------------------------------ */
 
+const CAT_TINTS = [
+  ['rgba(244, 192, 140, 0.18)', '#f4c08c'],
+  ['rgba(169, 147, 245, 0.2)', '#c3b4ff'],
+  ['rgba(111, 227, 185, 0.16)', '#6fe3b9'],
+  ['rgba(242, 154, 154, 0.18)', '#f6a8a8'],
+  ['rgba(120, 190, 255, 0.18)', '#9fcbff'],
+] as const;
+
+function tintFor(id: string): readonly [string, string] {
+  let hsh = 0;
+  for (let i = 0; i < id.length; i++) hsh = (hsh * 31 + id.charCodeAt(i)) >>> 0;
+  return CAT_TINTS[hsh % CAT_TINTS.length]!;
+}
+
 function renderCategories(m: HTMLElement): void {
   const input = h('input', { type: 'text', dir: 'auto', maxlength: LIMITS.categoryName, placeholder: 'New category, e.g. Sewing', 'aria-label': 'New category name' });
-  const add = h('button', { type: 'submit', class: 'btn primary' }, 'Add');
-  const form = h('form', { class: 'row' }, input, add);
-  input.style.flex = '1';
-  input.style.width = 'auto';
+  const add = h('button', { type: 'submit', class: 'btn primary' }, icon('plus', 18), 'Add');
+  const form = h('form', { class: 'add-cat' }, input, add);
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const name = cleanText(input.value, LIMITS.categoryName).replace(/\s+/g, ' ');
@@ -791,12 +835,17 @@ function renderCategories(m: HTMLElement): void {
   const counts = new Map<string, number>();
   for (const b of store.bookmarks) if (b.categoryId) counts.set(b.categoryId, (counts.get(b.categoryId) ?? 0) + 1);
   const inboxN = store.bookmarks.filter((b) => !b.categoryId).length;
+  const countText = (n: number) => `${n} ${n === 1 ? 'item' : 'items'}`;
+  const inboxDot = h('div', { class: 'cat-dot' }, icon('inbox', 20));
+  inboxDot.style.background = 'rgba(42, 34, 64, 0.14)';
   const ul = h('ul', { class: 'cat-list' },
-    h('li', { class: 'cat-item' },
-      h('button', { type: 'button', class: 'name', onclick: () => go('inbox') }, `Inbox (${inboxN})`)),
+    h('li', { class: 'cat-item inbox' },
+      inboxDot,
+      h('button', { type: 'button', class: 'name', onclick: () => go('inbox') }, 'Inbox'),
+      h('span', { class: 'cat-count' }, `${countText(inboxN)} to organize`)),
     store.categories.map((c) => {
       const n = counts.get(c.id) ?? 0;
-      const rename = h('button', { type: 'button', class: 'btn small', 'aria-label': `Rename ${c.name}` }, 'Rename');
+      const rename = h('button', { type: 'button', class: 'icon-btn', 'aria-label': `Rename ${c.name}`, title: 'Rename' }, icon('edit', 16));
       rename.addEventListener('click', async () => {
         const name = cleanText(window.prompt('Rename category', c.name) ?? '', LIMITS.categoryName).replace(/\s+/g, ' ');
         if (!name || name === c.name) return;
@@ -804,19 +853,24 @@ function renderCategories(m: HTMLElement): void {
         reindex();
         render();
       });
-      const del = h('button', { type: 'button', class: 'btn small danger', 'aria-label': `Delete ${c.name}` }, 'Delete');
+      const del = h('button', { type: 'button', class: 'icon-btn danger', 'aria-label': `Delete ${c.name}`, title: 'Delete' }, icon('trash', 16));
       del.addEventListener('click', async () => {
         if (!window.confirm(`Delete “${c.name}”? ${n} bookmark(s) will return to the Inbox.`)) return;
         await store.deleteCategory(c.id);
         reindex();
         render();
       });
+      const [bg, fg] = tintFor(c.id);
+      const dot = h('div', { class: 'cat-dot', 'aria-hidden': 'true' }, [...c.name.trim()][0]?.toUpperCase() ?? '•');
+      dot.style.background = bg;
+      dot.style.color = fg;
       return h('li', { class: 'cat-item' },
-        h('button', { type: 'button', class: 'name', dir: 'auto', onclick: () => go('library', { category: c.id }) }, `${c.name} (${n})`),
-        rename, del);
+        dot,
+        h('button', { type: 'button', class: 'name', dir: 'auto', onclick: () => go('library', { category: c.id }) }, c.name),
+        h('span', { class: 'cat-count' }, countText(n)),
+        h('div', { class: 'cat-actions' }, rename, del));
     }));
-  m.append(form, h('div', {}), ul);
-  (m.lastElementChild as HTMLElement).style.marginTop = '12px';
+  m.append(form, ul);
   if (!store.categories.length) m.append(h('p', { class: 'empty' }, 'No categories yet. Try “Sewing” or “Recipes”.'));
 }
 
@@ -824,8 +878,12 @@ function renderCategories(m: HTMLElement): void {
 /* More / settings                                                     */
 /* ------------------------------------------------------------------ */
 
+function sectionHead(iconName: string, title: string, tint = ''): HTMLElement {
+  return h('div', { class: 'section-head' }, h('span', { class: `section-icon ${tint}` }, icon(iconName, 20)), h('h2', {}, title));
+}
+
 function renderMore(m: HTMLElement): void {
-  const remote = h('input', { type: 'checkbox', id: 'remote-thumbs', checked: store.settings.remoteThumbnails });
+  const remote = h('input', { type: 'checkbox', id: 'remote-thumbs', role: 'switch', checked: store.settings.remoteThumbnails });
   remote.addEventListener('change', async () => {
     await store.saveSettings({ remoteThumbnails: remote.checked });
     toast(remote.checked ? 'YouTube previews on' : 'Remote previews off');
@@ -837,29 +895,32 @@ function renderMore(m: HTMLElement): void {
     await requestPersistence();
     void describeStorage(storageInfo);
   });
+  const tile = (iconName: string, label: string, onclick: () => void, primary = false) =>
+    h('button', { type: 'button', class: `action-tile${primary ? ' primary' : ''}`, onclick }, icon(iconName, 24), label);
 
   m.append(
     h('section', { class: 'section' },
-      h('h2', {}, 'Add'),
+      sectionHead('download', 'Add to your library'),
+      h('div', { class: 'action-grid' },
+        tile('download', 'Import Shortcut Inbox', () => void importShortcutInbox(), true),
+        tile('link', 'Add Link', () => openAddDialog()),
+        tile('paste', 'Paste many', () => openBulkDialog())),
+      h('p', {}, 'Import Shortcut Inbox opens Files. Select all the capture files in your inbox folder. You will see a preview before anything is added.')),
+    h('section', { class: 'section' },
+      sectionHead('eye', 'Previews', 'lav'),
+      h('label', { class: 'switch', for: 'remote-thumbs' },
+        h('span', { class: 'text' }, h('strong', {}, 'Load YouTube thumbnails'),
+          'Your device requests small preview images from YouTube (i.ytimg.com) for YouTube links you scroll past, so YouTube sees that request. No referrer is sent and images are not stored. Instagram, Facebook and TikTok have no supported free preview, so add a cover from a screenshot instead.'),
+        remote)),
+    h('section', { class: 'section' },
+      sectionHead('upload', 'Backup', 'mint'),
+      h('p', {}, 'Your library lives only in this app on this device. Export a backup to Files regularly: deleting the Home Screen app or clearing Safari data erases it.'),
       h('div', { class: 'row' },
-        h('button', { type: 'button', class: 'btn primary', onclick: () => importShortcutInbox() }, 'Import Shortcut Inbox'),
-        h('button', { type: 'button', class: 'btn', onclick: () => openAddDialog() }, 'Add Link'),
-        h('button', { type: 'button', class: 'btn', onclick: () => openBulkDialog() }, 'Paste many')),
-      h('p', {}, 'Import Shortcut Inbox opens Files. Select the capture files in your inbox folder (select several at once); you will see a preview before anything is added.')),
+        h('button', { type: 'button', class: 'btn primary', onclick: () => exportBackup() }, icon('upload', 18), 'Export backup'),
+        h('button', { type: 'button', class: 'btn', onclick: () => restoreBackup() }, icon('download', 18), 'Restore backup'))),
+    h('section', { class: 'section' }, sectionHead('storage', 'Storage', 'lav'), storageInfo, persist),
     h('section', { class: 'section' },
-      h('h2', {}, 'Previews'),
-      h('label', { class: 'switch', for: 'remote-thumbs' }, remote,
-        h('span', {}, h('strong', {}, 'Load YouTube thumbnails'), h('br'),
-          'When on, your device requests small preview images from YouTube (i.ytimg.com) for YouTube links you scroll past. YouTube receives that image request. No referrer is sent and images are not stored. Instagram, Facebook and TikTok have no supported free preview — add a cover from a screenshot instead.'))),
-    h('section', { class: 'section' },
-      h('h2', {}, 'Backup'),
-      h('p', {}, 'Your library lives only in this browser on this device. Export a backup to Files regularly; deleting the Home Screen app or clearing Safari data erases it.'),
-      h('div', { class: 'row' },
-        h('button', { type: 'button', class: 'btn', onclick: () => exportBackup() }, 'Export backup'),
-        h('button', { type: 'button', class: 'btn', onclick: () => restoreBackup() }, 'Restore backup'))),
-    h('section', { class: 'section' }, h('h2', {}, 'Storage'), storageInfo, persist),
-    h('section', { class: 'section' },
-      h('h2', {}, 'Privacy'),
+      sectionHead('shield', 'Privacy', 'rose'),
       h('p', {}, 'No account, server, analytics or trackers. Links open at their source. Shared text is shown as plain text. Covers you add are resized and stored only on this device.')),
   );
 }

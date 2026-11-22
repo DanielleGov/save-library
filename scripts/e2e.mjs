@@ -96,7 +96,7 @@ try {
   await page.fill('input[type=url]', 'https://facebook.com/reel/1234567890?mibextid=abc');
   await page.click('dialog button:has-text("Save")');
   check('Duplicate detected on manual add', (await page.textContent('#add-err')).includes('already'));
-  await page.click('dialog button:has-text("Close")');
+  await page.click('dialog button[aria-label=Close]');
 
   // Import Shortcut Inbox with fixtures
   const fixtures = readdirSync(join(root, 'fixtures/shortcut-inbox')).map((f) => join(root, 'fixtures/shortcut-inbox', f));
@@ -130,7 +130,7 @@ try {
   await recipes.locator('button:has-text("מתכונים")').click();
   await tab('Categories');
   const catText = await page.locator('.cat-list').textContent();
-  check('Categories created from suggestions', catText.includes('Sewing (1)') && catText.includes('מתכונים (1)'), catText);
+  check('Categories created from suggestions', /Sewing\s*1 item/.test(catText) && /מתכונים\s*1 item/.test(catText), catText);
 
   // Bulk paste
   await page.click('#add-btn');
@@ -169,7 +169,7 @@ try {
   await page.click('dialog button:has-text("Save")');
 
   // Grid view
-  await page.click('button[aria-pressed]:has-text("Grid")');
+  await page.click('.segmented button:has-text("Grid")');
   await page.waitForSelector('.cards.grid .thumb img[src^="blob:"]');
   check('Cover visible in grid', true);
   check('No horizontal scroll (grid)', await noHScroll());
@@ -202,7 +202,7 @@ try {
   await page.fill('input[type=search]', 'מתכון');
   await page.waitForTimeout(250);
   check('Hebrew search', (await page.locator('.card').count()) === 1);
-  await page.click('button[aria-pressed]:has-text("List")');
+  await page.click('.segmented button:has-text("List")');
   await shot('05-hebrew-search-list');
 
   // Delete category → bookmarks back to Inbox
@@ -281,7 +281,7 @@ try {
   check('Search over 3,000 renders < 150 ms after debounce', searchMs < 150, `${searchMs.toFixed(1)} ms`);
   check('DOM stays small (paged rendering)', (await p3.locator('.card').count()) <= 60);
   await p3.fill('input[type=search]', '');
-  await p3.click('button[aria-pressed]:has-text("Grid")');
+  await p3.click('.segmented button:has-text("Grid")');
   for (let i = 0; i < 5; i++) await p3.mouse.wheel(0, 3000);
   await p3.waitForTimeout(300);
   check('Infinite scroll loads more', (await p3.locator('.card').count()) > 60);

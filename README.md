@@ -262,7 +262,8 @@ None of these have been run yet. Record the results here.
 ```
 index.html               App shell (CSP injected at build)
 src/main.ts              UI: library, inbox, categories, dialogs, import/backup flows
-src/styles.css           Responsive, accessible styles (light/dark, RTL-aware)
+src/styles.css           Dark theme, responsive, accessible, RTL-aware styles
+src/ui/icons.ts          Inline SVG icon set
 src/lib/url.ts           Validation, extraction, platform/type inference, dedup keys
 src/lib/importer.ts      Capture files, bulk paste, import planning, backup/restore
 src/lib/db.ts            IndexedDB store (bookmarks, categories, covers, settings, imported captures)

@@ -10,7 +10,7 @@ const page = await browser.newPage();
 async function render(size, file, { maskable = false, square = false } = {}) {
   await page.setViewportSize({ width: size, height: size });
   const inner = maskable ? svg.replace('rx="112"', 'rx="0"').replace('viewBox="0 0 512 512"', 'viewBox="-64 -64 640 640"') : square ? svg.replace('rx="112"', 'rx="0"') : svg;
-  const bg = maskable ? '#2f5bd3' : 'transparent';
+  const bg = maskable ? '#211d33' : 'transparent';
   await page.setContent(`<html><body style="margin:0;background:${bg}">${inner.replace('<svg ', `<svg width="${size}" height="${size}" `)}</body></html>`);
   writeFileSync(new URL(`../public/icons/${file}`, import.meta.url), await page.screenshot({ omitBackground: !maskable }));
 }

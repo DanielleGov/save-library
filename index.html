@@ -4,11 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="referrer" content="no-referrer" />
-    <meta name="theme-color" content="#f6f4f1" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#151515" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#211d33" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Library" />
     <meta name="description" content="Private bookmark library for reels, videos and links." />
     <link rel="manifest" href="./manifest.webmanifest" />
@@ -19,16 +19,20 @@
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
     <header class="topbar">
-      <h1 id="view-title">Library</h1>
-      <span id="offline-badge" class="badge" hidden>Offline</span>
-      <button id="add-btn" class="btn primary" type="button">+ Add Link</button>
+      <div class="brand">
+        <p class="eyebrow">Save Library</p>
+        <h1 id="view-title">Library</h1>
+        <p id="view-sub" class="subtitle"></p>
+      </div>
+      <span id="offline-badge" class="badge" hidden><span data-icon="offline" data-size="14"></span>Offline</span>
     </header>
     <main id="main" tabindex="-1"></main>
     <nav class="tabbar" aria-label="Sections">
-      <button type="button" data-view="library" aria-current="page"><span aria-hidden="true">▦</span>Library</button>
-      <button type="button" data-view="inbox"><span aria-hidden="true">⇩</span>Inbox <span class="count" id="inbox-count"></span></button>
-      <button type="button" data-view="categories"><span aria-hidden="true">▤</span>Categories</button>
-      <button type="button" data-view="more"><span aria-hidden="true">⋯</span>More</button>
+      <button type="button" data-view="library" aria-current="page"><span data-icon="library"></span><span class="tab-label">Library</span></button>
+      <button type="button" data-view="inbox"><span class="tab-icon"><span data-icon="inbox"></span><span class="count" id="inbox-count"></span></span><span class="tab-label">Inbox</span></button>
+      <button type="button" id="add-btn" class="fab" aria-label="Add Link"><span data-icon="plus" data-size="28"></span></button>
+      <button type="button" data-view="categories"><span data-icon="folder"></span><span class="tab-label">Categories</span></button>
+      <button type="button" data-view="more"><span data-icon="more"></span><span class="tab-label">More</span></button>
     </nav>
     <div id="toast" role="status" aria-live="polite"></div>
     <dialog id="dialog" aria-labelledby="dialog-title"></dialog>
