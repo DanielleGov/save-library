@@ -18,7 +18,9 @@ export function haystack(b: Bookmark, categoryName?: string): string {
   return normalize(
     [
       b.title,
+      b.autoTitle,
       b.sharedText,
+      b.screenText,
       b.note,
       b.tags.join(' '),
       categoryName,

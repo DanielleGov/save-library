@@ -98,8 +98,10 @@ function matchCount(textTokens: string[], textNorm: string, keywords: string[]):
   return n;
 }
 
-export function suggestionText(b: Pick<Bookmark, 'title' | 'sharedText' | 'note' | 'tags'>): string {
-  return [b.title, b.sharedText ? textWithoutUrls(b.sharedText) : '', b.note, b.tags.join(' ')]
+type SuggestFields = Pick<Bookmark, 'title' | 'sharedText' | 'note' | 'tags'> & Partial<Pick<Bookmark, 'autoTitle' | 'screenText'>>;
+
+export function suggestionText(b: SuggestFields): string {
+  return [b.title, b.sharedText ? textWithoutUrls(b.sharedText) : '', b.screenText, b.note, b.tags.join(' ')]
     .filter(Boolean)
     .join(' ');
 }
@@ -107,7 +109,7 @@ export function suggestionText(b: Pick<Bookmark, 'title' | 'sharedText' | 'note'
 const STOP = new Set(['and', 'the', 'my', 'of', 'for', 'to', 'a', 'ideas', 'stuff', 'של', 'את', 'ו']);
 
 export function suggestCategory(
-  b: Pick<Bookmark, 'title' | 'sharedText' | 'note' | 'tags'>,
+  b: SuggestFields,
   categories: Category[],
 ): Suggestion | null {
   const text = suggestionText(b);

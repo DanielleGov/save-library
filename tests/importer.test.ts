@@ -28,6 +28,7 @@ describe('Shortcut capture files (fixtures)', () => {
       'capture-20261122-101500-4821.json',
       'capture-20261122-101730-0193.json',
       'capture-20261122-102000-7777.json',
+      'capture-20261122-211600-5150-screenshot.json',
       'capture-plain-text.txt',
     ]);
     const multi = caps.find((c) => c.id === '20261122-102000-7777')!;
@@ -50,10 +51,10 @@ describe('Shortcut capture files (fixtures)', () => {
   it('dedupes repeated imports of the same captures', () => {
     const cands = capturesToCandidates(caps);
     const first = planImport(cands, new Set(), 'shortcut');
-    expect(first.toAdd.length).toBe(5);
+    expect(first.toAdd.length).toBe(6);
     const again = planImport(capturesToCandidates(caps), new Set(first.toAdd.map((b) => b.key)), 'shortcut');
     expect(again.toAdd.length).toBe(0);
-    expect(again.duplicates).toBe(5);
+    expect(again.duplicates).toBe(6);
   });
 
   it('dedupes within one batch (same reel shared twice with different tracking)', () => {

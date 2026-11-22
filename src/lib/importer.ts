@@ -1,5 +1,6 @@
 import { cleanTags, cleanText, uid } from './text';
 import { LIMITS, MEDIA_TYPES, type Bookmark, type BookmarkSource, type Category, type MediaType } from './types';
+import { cleanScreenText, meaningfulShareTitle, titleFromScreenText } from './screentext';
 import { analyzeLink, extractUrls, textWithoutUrls, type LinkInfo } from './url';
 
 /* ------------------------------------------------------------------ */
@@ -23,6 +24,17 @@ export interface Capture {
   urls: string[];
   text: string;
   invalid: number;
+  /** Title the sharing app attached, if meaningful. */
+  shareTitle?: string;
+  /** Cleaned text recognized in the screenshot. */
+  screenText?: string;
+  /** Screenshot image (not yet resized; the app re-encodes it before storing). */
+  cover?: RawImage;
+}
+
+export interface RawImage {
+  type: string;
+  bytes: ArrayBuffer;
 }
 
 export interface FileProblem {
@@ -56,7 +68,7 @@ function collectRawUrls(v: unknown): string[] {
 }
 
 export function parseCaptureFile(fileName: string, content: string): Capture | FileProblem {
-  if (content.length > LIMITS.captureFileBytes) return { fileName, reason: 'File is too large for a capture' };
+  if (content.length > LIMITS.captureWithCoverBytes) return { fileName, reason: 'File is too large for a capture' };
   const trimmed = content.replace(/^\ufeff/, '').trim();
   if (!trimmed) return { fileName, reason: 'Empty file' };
 
@@ -64,6 +76,9 @@ export function parseCaptureFile(fileName: string, content: string): Capture | F
   let text = '';
   let id: string | null = null;
   let createdAt: number | null = null;
+  let shareTitle = '';
+  let screenText = '';
+  let cover: RawImage | null = null;
   let json: unknown = undefined;
   if (trimmed.startsWith('{')) {
     try {
@@ -83,7 +98,17 @@ export function parseCaptureFile(fileName: string, content: string): Capture | F
     text = cleanText(o.text, LIMITS.sharedText * 2);
     if (typeof o.id === 'string' && o.id.trim()) id = o.id.trim().slice(0, 100);
     createdAt = parseDate(o.createdAt ?? o.timestamp);
+    shareTitle = meaningfulShareTitle(o.title);
+    screenText = cleanScreenText(o.screenText, LIMITS.screenText);
+    cover = decodeImage(o.cover, LIMITS.captureCoverBytes);
+    // Safety net: ignore a screenshot that was clearly not taken around the time of this share.
+    const shotAt = parseDate(o.screenshotAt);
+    if (shotAt !== null && createdAt !== null && Math.abs(createdAt - shotAt) > 10 * 60_000) {
+      screenText = '';
+      cover = null;
+    }
   } else {
+    if (content.length > LIMITS.captureFileBytes) return { fileName, reason: 'File is too large for a capture' };
     text = cleanText(trimmed, LIMITS.sharedText * 2);
   }
 
@@ -105,6 +130,9 @@ export function parseCaptureFile(fileName: string, content: string): Capture | F
     urls,
     text,
     invalid,
+    ...(shareTitle ? { shareTitle } : {}),
+    ...(screenText ? { screenText } : {}),
+    ...(cover ? { cover } : {}),
   };
 }
 
@@ -121,6 +149,9 @@ export interface Candidate {
   sharedText: string;
   createdAt: number | null;
   captureId?: string;
+  autoTitle?: string;
+  screenText?: string;
+  cover?: RawImage;
 }
 
 /** One candidate per link. Text on the same line (minus the links) becomes the shared text. */
@@ -148,9 +179,18 @@ export function capturesToCandidates(captures: Capture[]): Candidate[] {
   const out: Candidate[] = [];
   for (const c of captures) {
     const shared = cleanText(textWithoutUrls(c.text), LIMITS.sharedText);
+    // Prefer the app-provided title; otherwise derive one from the screenshot text.
+    const autoTitle = c.shareTitle || (c.screenText ? titleFromScreenText(c.screenText) : '') || undefined;
     for (const u of c.urls) {
       const a = analyzeLink(u);
-      if (a.ok) out.push({ info: a.info, sharedText: shared, createdAt: c.createdAt, captureId: c.id });
+      if (a.ok) {
+        out.push({
+          info: a.info, sharedText: shared, createdAt: c.createdAt, captureId: c.id,
+          ...(autoTitle ? { autoTitle } : {}),
+          ...(c.screenText ? { screenText: c.screenText } : {}),
+          ...(c.cover ? { cover: c.cover } : {}),
+        });
+      }
     }
   }
   return out;
@@ -162,6 +202,8 @@ export function capturesToCandidates(captures: Capture[]): Candidate[] {
 
 export interface ImportPlan {
   toAdd: Bookmark[];
+  /** Screenshot images keyed by new bookmark id; resized by the app before storing. */
+  covers?: Map<string, RawImage>;
   duplicates: number;
   invalid: number;
 }
@@ -175,6 +217,7 @@ export function planImport(
 ): ImportPlan {
   const seen = new Set(existingKeys);
   const toAdd: Bookmark[] = [];
+  const covers = new Map<string, RawImage>();
   let duplicates = 0;
   candidates.forEach((c, i) => {
     if (seen.has(c.info.key)) {
@@ -184,14 +227,18 @@ export function planImport(
     seen.add(c.info.key);
     // Keep given order newest-first while giving each item a distinct timestamp.
     const t = c.createdAt ?? now - i;
-    toAdd.push(newBookmark(c.info, { sharedText: c.sharedText, source, savedAt: Math.min(t, now) }));
+    const b = newBookmark(c.info, {
+      sharedText: c.sharedText, autoTitle: c.autoTitle, screenText: c.screenText, source, savedAt: Math.min(t, now),
+    });
+    if (c.cover) covers.set(b.id, c.cover);
+    toAdd.push(b);
   });
-  return { toAdd, duplicates, invalid };
+  return { toAdd, duplicates, invalid, covers };
 }
 
 export function newBookmark(
   info: LinkInfo,
-  extra: Partial<Pick<Bookmark, 'sharedText' | 'title' | 'note' | 'tags' | 'categoryId' | 'savedAt'>> & {
+  extra: Partial<Pick<Bookmark, 'sharedText' | 'title' | 'autoTitle' | 'screenText' | 'note' | 'tags' | 'categoryId' | 'savedAt'>> & {
     source: BookmarkSource;
   },
 ): Bookmark {
@@ -206,6 +253,8 @@ export function newBookmark(
     updatedAt: now,
     sharedText: extra.sharedText ? cleanText(extra.sharedText, LIMITS.sharedText) : undefined,
     title: extra.title ? cleanText(extra.title, LIMITS.title) : undefined,
+    ...(extra.autoTitle ? { autoTitle: cleanText(extra.autoTitle, LIMITS.title) } : {}),
+    ...(extra.screenText ? { screenText: cleanText(extra.screenText, LIMITS.screenText) } : {}),
     note: extra.note ? cleanText(extra.note, LIMITS.note) : undefined,
     tags: cleanTags(extra.tags ?? [], LIMITS.tag, LIMITS.tags),
     categoryId: extra.categoryId ?? null,
@@ -356,6 +405,8 @@ export function planRestore(
     const b = newBookmark(a.info, {
       sharedText: typeof raw.sharedText === 'string' ? raw.sharedText : undefined,
       title: typeof raw.title === 'string' ? raw.title : undefined,
+      autoTitle: typeof raw.autoTitle === 'string' ? raw.autoTitle : undefined,
+      screenText: typeof raw.screenText === 'string' ? raw.screenText : undefined,
       note: typeof raw.note === 'string' ? raw.note : undefined,
       tags: Array.isArray(raw.tags) ? raw.tags : [],
       categoryId: typeof raw.categoryId === 'string' ? categoryMap.get(raw.categoryId) ?? null : null,
@@ -375,4 +426,29 @@ export function planRestore(
     toAdd.push(b);
   }
   return { categoriesToAdd, categoryMap, toAdd, covers, duplicates, invalid, coversSkipped };
+}
+
+/** Signature-checked image from a data URL or bare base64 (as written by the Shortcut). */
+export function decodeImage(input: unknown, maxBytes: number): RawImage | null {
+  if (typeof input !== 'string' || !input.trim()) return null;
+  let b64 = input.trim();
+  const m = /^data:image\/[a-z0-9.+-]+;base64,/i.exec(b64);
+  if (m) b64 = b64.slice(m[0].length);
+  b64 = b64.replace(/\s+/g, '');
+  if (!b64 || b64.length > maxBytes * 1.4 + 16 || !/^[A-Za-z0-9+/]+={0,2}$/.test(b64)) return null;
+  let bin: string;
+  try {
+    bin = atob(b64);
+  } catch {
+    return null;
+  }
+  if (bin.length > maxBytes || bin.length < 16) return null;
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  let type: string | null = null;
+  if (bytes[0] === 0xff && bytes[1] === 0xd8) type = 'image/jpeg';
+  else if (bytes[0] === 0x89 && bin.slice(1, 4) === 'PNG') type = 'image/png';
+  else if (bin.slice(0, 4) === 'RIFF' && bin.slice(8, 12) === 'WEBP') type = 'image/webp';
+  else if (bin.slice(4, 12) === 'ftypheic' || bin.slice(4, 12) === 'ftypheix' || bin.slice(4, 12) === 'ftypmif1') type = 'image/heic';
+  return type ? { type, bytes: bytes.buffer } : null;
 }

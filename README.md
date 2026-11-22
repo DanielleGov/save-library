@@ -137,6 +137,36 @@ Action names are from iOS 17/18 in English. Use the search field at the bottom o
 - To move it to the front: in the share sheet, scroll the app row to the end → **More** → **Edit** → drag **Save to Library** up or add it to Favorites.
 - If an app has no share sheet option (some only offer **Copy Link**), copy the link, open **Library** → **+ Add Link** → **Paste**.
 
+### 2d. Screenshot → automatic thumbnail and title (recommended for Facebook/Instagram)
+
+Facebook and Instagram share only a bare link, so the app can't tell what a reel is about. To fix that, **take a screenshot of the reel just before you share it** (side button + volume up), then Share → **Save to Library** as usual. The Shortcut picks up a screenshot taken in the last 3 minutes and:
+- shrinks it to 600 px wide JPEG → the bookmark's **thumbnail** (the app re-encodes it again to ≤ 480 px, metadata stripped),
+- reads the text on screen with iOS Live Text (**Extract Text from Image**, on-device) → an automatic **title**, searchable text and category suggestions.
+
+No screenshot (or an older one) → the capture works exactly as before. Nothing is fetched from Facebook; everything happens on the phone. Note: Live Text may not read Hebrew on every iOS version; the thumbnail still works.
+
+Add these actions **between "Random number" and "Dictionary"**. Tip: press and hold an action in the search results and drag it straight into place; or add it at the bottom and drag it up.
+
+1. **Get Latest Screenshots** — set the count to **1**. (First run: allow access to Photos.)
+2. **Get Details of Images** — detail **Date Taken**, of **Latest Screenshots**.
+3. **Get Time Between Dates** — between **Date** (the Date block) and **Date Taken**, in **Minutes**.
+4. **If** — **Time Between Dates** **is between** `-3` and `3`. Inside the If (before Otherwise):
+   1. **Resize Image** — **Latest Screenshots**, width `600`, height **Auto Height**.
+   2. **Convert Image** — **Resized Image** to **JPEG**, Quality about **70%**, **Preserve Metadata** off.
+   3. **Base64 Encode** — **Converted Image**; expand it and set **Line Breaks** to **None**.
+   4. **Set Variable** — name `Cover`, value **Base64 Encoded**.
+   5. **Extract Text from Image** — **Latest Screenshots**.
+   6. **Set Variable** — name `ScreenText`, value **Text from Image**.
+
+   Leave **Otherwise** empty.
+5. In the **Dictionary**, add three Text items:
+
+   | Key | Value |
+   | --- | --- |
+   | `cover` | **Cover** variable |
+   | `screenText` | **ScreenText** variable |
+   | `title` | **Shortcut Input**, then tap the inserted token and choose **Name** (some apps attach a title when sharing; if it's just the link, the app ignores it) |
+
 ## iPhone setup 3 — Import into the library
 
 1. Open **Library** from the Home Screen → **More** → **Import Shortcut Inbox**. (When the library is empty, the button is also on the home view.)
@@ -165,7 +195,8 @@ One UTF-8 JSON file per share (`fixtures/shortcut-inbox/` has examples):
 - `urls`: newline-separated text, or an array. Links in `text` are also picked up.
 - `id`: used to recognize repeat imports. If it is missing, an id is derived from the content.
 - The URLs are removed from `text`, and what remains becomes the bookmark's **shared text** (plain text, max 2,000 characters).
-- `.txt` files containing links are accepted as a fallback. Files over 64 KB are rejected, and so are newer `v` values, backups, and files without a valid link.
+- Optional: `title` (a title the sharing app attached; ignored if it is just a URL or a generic word), `screenText` (text recognized in a screenshot; clock, counters and buttons are dropped, and the rest becomes the automatic title), `cover` (bare base64 or a data URL of a JPEG/PNG/WebP/HEIC screenshot, max 2 MB; the app re-encodes it to a small JPEG), `screenshotAt` (if present and more than 10 minutes from `createdAt`, the screenshot is ignored).
+- `.txt` files containing links are accepted as a fallback. Files over 64 KB (3 MB when they carry a screenshot) are rejected, and so are newer `v` values, backups, and files without a valid link.
 - The format is platform-neutral, so an Android share target can write the same files later.
 
 ## How links are handled

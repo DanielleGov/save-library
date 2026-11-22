@@ -106,17 +106,20 @@ try {
   await chooser.setFiles(fixtures);
   await page.waitForSelector('dialog .stats');
   const stats = await page.locator('dialog .stats strong').allTextContents();
-  check('Import preview counts (new/dup/invalid)', stats.join(',') === '5,0,2', stats.join(','));
+  check('Import preview counts (new/dup/invalid)', stats.join(',') === '6,0,2', stats.join(','));
   await shot('01-import-preview');
-  await page.click('dialog button:has-text("Add 5")');
+  await page.click('dialog button:has-text("Add 6")');
   await page.click('dialog button:has-text("Go to Inbox")');
-  check('Imported into Inbox', (await page.locator('.card').count()) === 6);
+  check('Screenshot capture gets auto title', (await page.locator('.card', { hasText: "when you're asked in a job interview" }).count()) === 1);
+  await page.locator('.card', { hasText: 'job interview' }).locator('.thumb img[src^="blob:"]').waitFor({ timeout: 5000 }).catch(() => undefined);
+  check('Screenshot capture gets a cover', (await page.locator('.card', { hasText: 'job interview' }).locator('.thumb img[src^="blob:"]').count()) === 1);
+  check('Imported into Inbox', (await page.locator('.card').count()) === 7);
 
   [chooser] = await Promise.all([page.waitForEvent('filechooser'), (await tab('More'), page.click('button:has-text("Import Shortcut Inbox")'))]);
   await chooser.setFiles(fixtures);
   await page.waitForSelector('dialog .stats');
   const stats2 = await page.locator('dialog .stats strong').allTextContents();
-  check('Repeat import adds nothing', stats2[0] === '0' && stats2[1] === '5', stats2.join(','));
+  check('Repeat import adds nothing', stats2[0] === '0' && stats2[1] === '6', stats2.join(','));
   await page.click('dialog button:has-text("Cancel")');
 
   // Inbox suggestions: Sewing (new) from the Instagram capture text, Hebrew recipes from TikTok text
@@ -165,7 +168,7 @@ try {
     db.close();
     return all.map((c) => ({ bytes: c.bytes.byteLength, w: c.width, h: c.height, type: c.type }));
   });
-  check('Cover resized and stored small', coverInfo.length === 1 && coverInfo[0].h <= 480 && coverInfo[0].bytes < 200 * 1024 && coverInfo[0].type === 'image/jpeg', JSON.stringify(coverInfo));
+  check('Cover resized and stored small', coverInfo.length === 2 && coverInfo.every((c) => c.h <= 480 && c.w <= 480 && c.bytes < 200 * 1024 && c.type === 'image/jpeg'), JSON.stringify(coverInfo));
   await page.click('dialog button:has-text("Save")');
 
   // Grid view
@@ -227,8 +230,8 @@ try {
   await chooser.setFiles(backupPath);
   await p2.waitForSelector('dialog .stats');
   const rs = await p2.locator('dialog .stats strong').allTextContents();
-  check('Restore preview (8 new)', rs[0] === '8', rs.join(','));
-  await p2.click('dialog button:has-text("Add 8")');
+  check('Restore preview (9 new)', rs[0] === '9', rs.join(','));
+  await p2.click('dialog button:has-text("Add 9")');
   await p2.waitForSelector('.card');
   await p2.reload();
   await p2.waitForSelector('.card');
@@ -242,7 +245,7 @@ try {
   await chooser.setFiles(backupPath);
   await p2.waitForSelector('dialog .stats');
   const rs2 = await p2.locator('dialog .stats strong').allTextContents();
-  check('Repeat restore adds nothing', rs2[0] === '0' && rs2[1] === '8', rs2.join(','));
+  check('Repeat restore adds nothing', rs2[0] === '0' && rs2[1] === '9', rs2.join(','));
   await ctx2.close();
 
   // Responsiveness with 3,000 synthetic bookmarks (restored via a generated backup)

@@ -42,6 +42,10 @@ export interface Bookmark {
   /** Untrusted text that arrived with the link (share sheet / paste). Plain text only. */
   sharedText?: string;
   title?: string;
+  /** Title found automatically (share-sheet title or screenshot text). The user's title wins. */
+  autoTitle?: string;
+  /** Cleaned on-device text recognized in a screenshot taken when saving. Plain text, searchable. */
+  screenText?: string;
   note?: string;
   tags: string[];
   categoryId: string | null;
@@ -108,6 +112,10 @@ export const LIMITS = {
   categoryName: 60,
   categories: 500,
   captureFileBytes: 64 * 1024,
+  /** A capture carrying a screenshot cover (base64) may be larger. */
+  captureWithCoverBytes: 3 * 1024 * 1024,
+  captureCoverBytes: 2 * 1024 * 1024,
+  screenText: 3000,
   captureFiles: 500,
   bulkPasteChars: 500_000,
   bulkPasteUrls: 5000,

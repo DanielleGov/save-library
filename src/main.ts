@@ -29,6 +29,7 @@ import {
   PLATFORM_LABELS,
   PLATFORMS,
   type Bookmark,
+  type Cover,
   type MediaType,
   type Platform,
 } from './lib/types';
@@ -256,6 +257,7 @@ function emptyLibrary(): HTMLElement {
 
 function displayTitle(b: Bookmark): string {
   if (b.title) return b.title;
+  if (b.autoTitle) return b.autoTitle;
   const line = b.sharedText?.split('\n').find((l) => l.trim());
   if (line) return line;
   if (b.platform === 'other') return displayUrl(b.url);
@@ -631,6 +633,7 @@ function openEditDialog(id: string): void {
       h('div', { class: 'row' },
         h('a', { class: 'btn small primary', href: b.url, target: '_blank', rel: 'noopener noreferrer' }, icon('external', 16), 'Open original'), copy)),
     b.sharedText ? h('div', { class: 'field' }, h('span', {}, 'Shared text'), h('p', { class: 'shared', dir: 'auto' }, b.sharedText)) : null,
+    b.screenText ? h('div', { class: 'field' }, h('span', {}, 'Text from screenshot'), h('p', { class: 'shared', dir: 'auto' }, b.screenText)) : null,
     h('label', { class: 'field' }, h('span', {}, 'Title'), title),
     h('label', { class: 'field' }, h('span', {}, 'Category'), cat),
     newCat,
@@ -659,7 +662,8 @@ function previewDialog(
   const list = h('ul', { class: 'preview-list' },
     plan.toAdd.slice(0, 100).map((b) => h('li', { dir: 'auto' },
       h('strong', {}, `${PLATFORM_LABELS[b.platform]} ${MEDIA_LABELS[b.mediaType]}`), ' · ',
-      b.sharedText ? b.sharedText.slice(0, 120) : displayUrl(b.url))));
+      (b.autoTitle || b.sharedText)?.slice(0, 120) || displayUrl(b.url),
+      plan.covers?.has(b.id) ? ' · 🖼 screenshot' : '')));
   const confirm = h('button', { type: 'button', class: 'btn primary', disabled: plan.toAdd.length === 0 },
     plan.toAdd.length ? `Add ${plan.toAdd.length}` : 'Nothing new to add');
   confirm.addEventListener('click', async () => {
@@ -697,13 +701,26 @@ function openBulkDialog(): void {
   ta.focus();
 }
 
+/** Re-encode screenshots from captures on-device into small covers (strips metadata). Failures are skipped. */
+async function resizeCaptureCovers(plan: ImportPlan): Promise<Map<string, Omit<Cover, 'id'>>> {
+  const out = new Map<string, Omit<Cover, 'id'>>();
+  for (const [id, raw] of plan.covers ?? []) {
+    try {
+      out.set(id, await makeCover(new Blob([raw.bytes], { type: raw.type })));
+    } catch {
+      /* unsupported image: keep the placeholder */
+    }
+  }
+  return out;
+}
+
 async function importShortcutInbox(): Promise<void> {
   const files = await pickFiles('.json,.txt,application/json,text/plain', true);
   if (!files.length) return;
   const problems: FileProblem[] = [];
   const captures: Capture[] = [];
   for (const f of files.slice(0, LIMITS.captureFiles)) {
-    if (f.size > LIMITS.captureFileBytes) {
+    if (f.size > LIMITS.captureWithCoverBytes) {
       problems.push({ fileName: f.name, reason: 'Too large for a capture file' });
       continue;
     }
@@ -727,7 +744,11 @@ async function importShortcutInbox(): Promise<void> {
       h('ul', { class: 'preview-list' }, problems.map((p) => h('li', {}, `${p.fileName}: ${p.reason}`)))));
   }
   previewDialog('Import Shortcut Inbox', plan, extra, async () => {
-    const added = await store.addBookmarks(plan.toAdd, { captureIds: fresh.map((c) => c.id) });
+    const covers = await resizeCaptureCovers(plan);
+    const added = await store.addBookmarks(plan.toAdd.map((b) => (covers.has(b.id) ? { ...b, hasCover: true } : b)), {
+      captureIds: fresh.map((c) => c.id),
+      covers,
+    });
     void requestPersistence();
     showDialog('Imported', [
       h('p', {}, `Added ${added.length} bookmark(s) to your Inbox.`),
