@@ -99,7 +99,7 @@ Action names are from iOS 17/18 in English. Use the search field at the bottom o
 
 1. Open **Shortcuts** → **+** (new shortcut). Tap the name at the top and rename it **Save to Library**.
 2. Tap the **ⓘ** (or the down-arrow by the name → **Details**) and turn on **Show in Share Sheet**. Tap **Done**.
-3. The first block now reads **Receive _Any_ input from _Share Sheet_**. Tap **Any**, tap **Clear**, select only **URLs** and **Text**, then tap **Done**. Images, videos and other media are not accepted. Tap **If there's no input** and choose **Stop and Respond**, with the response *No link found*.
+3. A block now appears at the top that reads **Receive _Any_ input from _Share Sheet_**. On recent iOS versions it may instead read **Receive _Apps and 18 more_ from _Share Sheet_** (the number can vary). Either way, it's the same block. Tap the underlined input types (**Any** / **Apps and 18 more**), tap **Clear** (or deselect everything), select only **URLs** and **Text**, then tap **Done**. The block should then read **Receive _URLs and Text_ from _Share Sheet_**. Images, videos and other media are not accepted. Tap **If there's no input** and choose **Stop and Respond**, with the response *No link found*.
 4. Add **Get URLs from Input**. Its input should be **Shortcut Input**.
 5. Add **If**. Set it to **URLs** **does not have any value**. Inside the If:
    - add **Show Alert** with the text *No link found — nothing was queued.* (turn off **Show Cancel Button**),
