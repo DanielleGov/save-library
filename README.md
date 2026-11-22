@@ -107,8 +107,8 @@ Action names are from iOS 17/18 in English. Use the search field at the bottom o
    Leave **Otherwise** empty. (You can delete the Otherwise branch.)
 6. After **End If**, add **Combine Text**. Combine **URLs** with **New Lines**.
 7. Add **Get Text from Input** with **Shortcut Input**. This keeps any caption or text the app shared.
-8. Add **Format Date**. Date: **Current Date**, Date Format: **ISO 8601**, and turn on **Include ISO 8601 Time**. Rename its output to `CreatedAt` (tap the variable → Rename).
-9. Add **Format Date** again. Date: **Current Date**, Date Format: **Custom**, Format String `yyyyMMdd-HHmmss`. Rename its output to `Stamp`.
+8. Add the action named **Date** and make sure it reads **Current Date**. Then add **Format Date** and set its input to that **Date** variable (tap the date token → Select Variable → tap the Date block). *(Leaving Format Date on its own default input caused a "couldn't convert from Text to Date" error on a real iPhone.)* Date Format: Date Format: **ISO 8601**, and turn on **Include ISO 8601 Time**. Rename its output to `CreatedAt` (tap the variable → Rename).
+9. Add **Format Date** again, also with the **Date** variable as its input, Date Format: **Custom**, Format String `yyyyMMdd-HHmmss`. Rename its output to `Stamp`.
 10. Add **Random Number** with Minimum `1000` and Maximum `9999`.
 11. Add **Dictionary** and add these items in this order (use **Add new item** and pick the type shown):
 
