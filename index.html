@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="theme-color" content="#f6f4f1" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#151515" media="(prefers-color-scheme: dark)" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Library" />
+    <meta name="description" content="Private bookmark library for reels, videos and links." />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icons/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+    <title>Save Library</title>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="topbar">
+      <h1 id="view-title">Library</h1>
+      <span id="offline-badge" class="badge" hidden>Offline</span>
+      <button id="add-btn" class="btn primary" type="button">+ Add Link</button>
+    </header>
+    <main id="main" tabindex="-1"></main>
+    <nav class="tabbar" aria-label="Sections">
+      <button type="button" data-view="library" aria-current="page"><span aria-hidden="true">▦</span>Library</button>
+      <button type="button" data-view="inbox"><span aria-hidden="true">⇩</span>Inbox <span class="count" id="inbox-count"></span></button>
+      <button type="button" data-view="categories"><span aria-hidden="true">▤</span>Categories</button>
+      <button type="button" data-view="more"><span aria-hidden="true">⋯</span>More</button>
+    </nav>
+    <div id="toast" role="status" aria-live="polite"></div>
+    <dialog id="dialog" aria-labelledby="dialog-title"></dialog>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
